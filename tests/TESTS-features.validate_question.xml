@@ -1,0 +1,39 @@
+<testsuite name="features.validate_question.Validate the researchers research question" tests="2" errors="2" failures="0" skipped="0" time="0.006837" timestamp="2025-10-22T01:28:49.732707" hostname="Cristian-Zambrano"><testcase classname="features.validate_question.Validate the researchers research question" name="Research owner approves a state of the research question -- @1.1 " status="error" time="0.004249"><error type="NoneType" message="None">
+<![CDATA[
+Failing step: And there are research question versions with status SUGGEST_REJECT awaiting validation ... undefined in 0.000s
+Location: tests/design/features/validate_question.feature:9
+None]]>
+</error><system-out>
+<![CDATA[
+@scenario.begin
+  Scenario Outline: Research owner approves a state of the research question -- @1.1 
+    Given the "Suggest Research Question" stage of the project is opened ... passed in 0.004s
+    And there are research question versions with status SUGGEST_REJECT awaiting validation ... undefined in 0.000s
+    When the owner approves the question with the justification BABABA ... undefined in 0.000s
+    Then the question status should to "APPROVED" ... skipped in 0.000s
+    And a history record should be created with approver, justification, and date ... skipped in 0.000s
+    And all members of the research project should receive a notification of the approval ... skipped in 0.000s
+
+@scenario.end
+--------------------------------------------------------------------------------
+]]>
+</system-out></testcase><testcase classname="features.validate_question.Validate the researchers research question" name="Research owner approves a state of the research question -- @1.2 " status="error" time="0.002589"><error type="NoneType" message="None">
+<![CDATA[
+Failing step: And there are research question versions with status SUGGESTED awaiting validation ... undefined in 0.000s
+Location: tests/design/features/validate_question.feature:9
+None]]>
+</error><system-out>
+<![CDATA[
+@scenario.begin
+  Scenario Outline: Research owner approves a state of the research question -- @1.2 
+    Given the "Suggest Research Question" stage of the project is opened ... passed in 0.003s
+    And there are research question versions with status SUGGESTED awaiting validation ... undefined in 0.000s
+    When the owner approves the question with the justification BABABA ... undefined in 0.000s
+    Then the question status should to "APPROVED" ... skipped in 0.000s
+    And a history record should be created with approver, justification, and date ... skipped in 0.000s
+    And all members of the research project should receive a notification of the approval ... skipped in 0.000s
+
+@scenario.end
+--------------------------------------------------------------------------------
+]]>
+</system-out></testcase></testsuite>

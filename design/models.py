@@ -12,6 +12,7 @@ class ResearchQuestion(models.Model):
     ]
     research_framework = models.ForeignKey('ResearchFramework', on_delete=models.CASCADE, related_name='research_questions')
     suggested_question = models.TextField(blank=True)
+    motivation = models.TextField(blank=True)
     project = models.ForeignKey(
         'project.Project', 
         on_delete=models.CASCADE, 
@@ -45,12 +46,16 @@ class ResearchQuestion(models.Model):
         return bool(self.suggested_question and self.suggested_question.strip())
     
     @property
+    def has_motivation(self):
+        return bool(self.motivation and self.motivation.strip())
+    
+    @property
     def is_framework_complete(self):
         """Returns True if all framework fields are filled."""
         return self.research_framework.is_complete
 
     def calculate_status(self):
-        if self.is_framework_complete and self.has_question_text:
+        if self.is_framework_complete and self.has_question_text and self.has_motivation:
             return 'READY_TO_SEND'
         return 'DRAFT'
     

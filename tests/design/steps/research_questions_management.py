@@ -44,14 +44,14 @@ def step_impl(context, stage_name):
     assert project_service.is_stage_opened(stage=context.stage)
 
 
-@step('I have written a "{ready_to_send_status}" question with the following content:')
-def step_impl(context, ready_to_send_status):
+@step('I have written a question with the following content:')
+def step_impl(context):
     payload = json.loads(context.text)
 
-    context.ready_to_send_status = ready_to_send_status
     context.framework = payload["framework"]
     context.fields = payload["fields"]
     context.suggested_question = payload["suggested_question"]
+    context.motivation = payload["motivation"]
     context.framework_object = ResearchFramework.objects.create(
         name=context.framework,
         fields=context.fields,
@@ -59,10 +59,15 @@ def step_impl(context, ready_to_send_status):
     context.research_question = ResearchQuestion.objects.create(
         research_framework =context.framework_object,
         suggested_question=context.suggested_question,
+        motivation=context.motivation,
         stage=context.stage,
         researcher=context.researcher,
         project=context.project
     )
+    
+@step('the question is on a "{ready_to_send_status}" status')
+def step_impl(context, ready_to_send_status):
+    context.ready_to_send_status = ready_to_send_status
     context.research_question.status = context.research_question.calculate_status()
     research_question_status = context.research_question.status
     assert context.ready_to_send_status == research_question_status
@@ -140,31 +145,24 @@ def step_impl(context, reject_status):
     assert research_question.status == context.reject_status
 
 # TERCER SCENARIO
-@step("I have completed {completed_framework_fields} fields of the selected {framework} framework")
-def step_impl(context, completed_framework_fields, framework):
-    pass
+@given('I chose the "{framework}" framework')
+def step_impl(context, framework):
+    
+    framework_fields_test_data = {
+        "PICO": {"P": "Population", "I": "Intervention", "C": "Comparison", "O": "Outcome"},
+        "PEO": {"P": "Population", "E": "Exposure", "O": "Outcome"},
+        "PCC": {"P": "Population", "C": "Concept", "C": "Context"},
+    }
+    print("GGG", framework_fields_test_data[framework])
+    context.framework_name = framework
+    
+    context.framework_object = ResearchFramework.objects.create(
+        name=context.framework_name,
+        fields=framework_fields_test_data[framework],
+    )
 
-@step('I have completed {completed_framework_fields} fields of the framework')
+@when('I have completed {completed_framework_fields}')
 def step_impl(context, completed_framework_fields):
     context.completed_framework_fields = int(completed_framework_fields)
-    context.research_question.fields_completed = context.completed_framework_fields
-    context.research_question.save()
-    research_question_status = research_question_service.define_status(research_question=context.research_question)
-
-@step('the suggested question text is "{suggested_question_exists}"')
-def step_impl(context, suggested_question_exists):
-    context.research_question
-    pass
-
-
-@when('the system receives a save progress request')
-def step_impl(context):
-    pass
-
-
-@then('the question should be saved with status "{status}"')
-def step_impl(context, status):
-    pass
-
-
-
+    total_fields = len(context.framework_object.fields)
+    assert context.completed_framework_fields == total_fields

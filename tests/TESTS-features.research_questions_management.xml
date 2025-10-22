@@ -1,9 +1,9 @@
-<testsuite name="features.research_questions_management.Managing the lifecycle of research questions" tests="2" errors="0" failures="0" skipped="0" time="0.015656" timestamp="2025-10-21T20:20:08.635681" hostname="Cristian-Zambrano"><testcase classname="features.research_questions_management.Managing the lifecycle of research questions" name="Submit a suggested research question for review" status="passed" time="0.009644"><system-out>
+<testsuite name="features.research_questions_management.Managing the lifecycle of research questions" tests="2" errors="0" failures="0" skipped="0" time="0.017491" timestamp="2025-10-22T01:28:49.690568" hostname="Cristian-Zambrano"><testcase classname="features.research_questions_management.Managing the lifecycle of research questions" name="Submit a suggested research question for review" status="passed" time="0.008222"><system-out>
 <![CDATA[
 @scenario.begin
   Scenario: Submit a suggested research question for review
     Given the "Suggest Research Question" stage of the project is opened ... passed in 0.006s
-    And I have written a "READY_TO_SEND" question with the following content: ... passed in 0.001s
+    And I have written a question with the following content: ... passed in 0.001s
       """
       {
           "framework": "PICO",
@@ -13,25 +13,27 @@
               "Context": "Online courses",
               "Outcome": "Motivation"
           },
-          "suggested_question": "PREGUNTA EJEMPLO"
+          "suggested_question": "PREGUNTA EJEMPLO",
+          "motivation": "MOTIVACION TEXTO EJEMPLO"
       }
       """
-    When I submit the question for review ... passed in 0.002s
-    Then the question should change its status to "SUGGESTED" ... passed in 0.000s
-    And a "RESEARCH_QUESTION_SUBMITTED_FOR_REVIEW" notification should be sent to the research project team ... passed in 0.001s
+    And the question is on a "READY_TO_SEND" status ... passed in 0.000s
+    When I submit the question for review ... passed in 0.000s
+    Then the question should change its status to "SUGGESTED" ... passed in 0.002s
+    And a "RESEARCH_QUESTION_SUBMITTED_FOR_REVIEW" notification should be sent to the research project team ... passed in 0.000s
 
 @scenario.end
 --------------------------------------------------------------------------------
 ]]>
-</system-out></testcase><testcase classname="features.research_questions_management.Managing the lifecycle of research questions" name="Propose to reject a suggested research question" status="passed" time="0.006012"><system-out>
+</system-out></testcase><testcase classname="features.research_questions_management.Managing the lifecycle of research questions" name="Propose to reject a suggested research question" status="passed" time="0.009268"><system-out>
 <![CDATA[
 @scenario.begin
   Scenario: Propose to reject a suggested research question
-    Given the "Research Question Discusion" stage of the project is opened ... passed in 0.003s
+    Given the "Research Question Discusion" stage of the project is opened ... passed in 0.005s
     And there exist a "SUGGESTED" question ... passed in 0.002s
-    When I suggest to reject the question with the justification "No aligned with project objectives" ... passed in 0.000s
-    Then the question status should change to "SUGGEST_REJECT" ... passed in 0.001s
-    And a "SUGGESTION_QUESTION_REJECT" notification should be sent to the research project team ... passed in 0.000s
+    When I suggest to reject the question with the justification "No aligned with project objectives" ... passed in 0.002s
+    Then the question status should change to "SUGGEST_REJECT" ... passed in 0.000s
+    And a "SUGGESTION_QUESTION_REJECT" notification should be sent to the research project team ... passed in 0.002s
 
 @scenario.end
 --------------------------------------------------------------------------------

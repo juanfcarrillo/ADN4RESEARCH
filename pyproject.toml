@@ -10,4 +10,4 @@ dependencies = [
 [tool.behave]
 junit = true
 junit_directory = "tests"
-paths = ["tests/apps/design/"]
+paths = ["tests/design/"]
