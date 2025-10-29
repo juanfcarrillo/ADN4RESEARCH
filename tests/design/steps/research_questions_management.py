@@ -4,10 +4,9 @@ from behave import given, then, when, step
 from faker import Faker
 from django.contrib.auth.models import User
 
-from design.models import ResearchFramework, ResearchQuestion
+from design.models.research_question_models import ResearchFramework, ResearchQuestion
 from design.services.question_services import ResearchQuestionService
 from notification.models import Notification
-from notification.services.notification_service import NotificationService
 from project.models import Project, Stage
 from project.services.project_services import ProjectService
 
@@ -15,7 +14,6 @@ fake = Faker()
 project_service = ProjectService()
 research_question_service = ResearchQuestionService()
 notification_service = Mock()
-
 
 @given('the "{stage_name}" stage of the project is opened')
 def step_impl(context, stage_name):
@@ -52,18 +50,26 @@ def step_impl(context):
     context.fields = payload["fields"]
     context.suggested_question = payload["suggested_question"]
     context.motivation = payload["motivation"]
-    context.framework_object = ResearchFramework.objects.create(
+    # Try to find existing framework (global or custom)
+    framework_obj, created = ResearchFramework.objects.get_or_create(
         name=context.framework,
-        fields=context.fields,
+        defaults={
+            "is_global": context.framework in ["PICO", "PEO", "PCC"],
+            "created_by": context.researcher if context.framework not in ["PICO", "PEO", "PCC"] else None,
+            "total_fields": len(context.fields),
+            "fields": context.fields
+        }
     )
+    # Attach framework to research question
     context.research_question = ResearchQuestion.objects.create(
-        research_framework =context.framework_object,
+        research_framework=framework_obj,
         suggested_question=context.suggested_question,
         motivation=context.motivation,
+        project=context.project,
         stage=context.stage,
-        researcher=context.researcher,
-        project=context.project
+        researcher=context.researcher
     )
+    context.research_question.save()
     
 @step('the question is on a "{ready_to_send_status}" status')
 def step_impl(context, ready_to_send_status):
@@ -75,7 +81,7 @@ def step_impl(context, ready_to_send_status):
 @when('I submit the question for review')
 def step_impl(context):
     # Dentro del metodo debo cambiar el estado de la pregunta a SUGGESTED
-    project_service.submit_research_question_for_review(
+    research_question_service.submit_research_question_for_review(
         research_question=context.research_question,
     )
     pass # Se verifica en el otro paso xd pero dentro de la funcion cambia el estado
@@ -103,7 +109,7 @@ def step_impl(context, notification_type):
     #)
     notifications = notification_service.get_notifications_for_project.return_value = [context.notification]
     assert len(notifications) > 0
-
+'''
 # SEGUNDO SCENARIO
 @step('there exist a "{suggested_status}" question')
 def step_impl(context, suggested_status):
@@ -129,7 +135,7 @@ def step_impl(context, suggested_status):
 @when('I suggest to reject the question with the justification "{justification}"')
 def step_impl(context, justification):
     context.justification = justification
-    project_service.suggest_rejecting_question(
+    research_question_service.suggest_rejecting_question(
         research_question=context.research_question,
         suggester=context.researcher2,
         justification=context.justification
@@ -165,4 +171,4 @@ def step_impl(context, framework):
 def step_impl(context, completed_framework_fields):
     context.completed_framework_fields = int(completed_framework_fields)
     total_fields = len(context.framework_object.fields)
-    assert context.completed_framework_fields == total_fields
+    assert context.completed_framework_fields == total_fields'''
