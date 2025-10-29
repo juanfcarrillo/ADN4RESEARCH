@@ -14,15 +14,7 @@ class ProjectService:
     def is_stage_opened(self, stage):
         return stage.status == "OPENED"
     
-    def submit_research_question_for_review(self, research_question):
-        research_question.status = 'SUGGESTED'
-        research_question.save()
-    
     def get_project_members(self, project):
         return project.get_members()
     
-    def suggest_rejecting_question(self, research_question, suggester , justification):
-        research_question.status = 'SUGGEST_REJECT'
-        research_question.suggester  = suggester
-        research_question.justification = justification
-        research_question.save()
+    
