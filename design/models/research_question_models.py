@@ -43,14 +43,14 @@ class ResearchQuestion(models.Model):
     """
     Represents a research question created under a specific framework and stage.
     """
-    STATUS_CHOICES = [
-        ('DRAFT', 'Draft'),
-        ('READY_TO_SEND', 'Ready to Send'),
-        ('SUGGESTED', 'Suggested'),
-        ('SUGGEST_REJECT', 'Suggest Reject'),
-        ('APPROVED', 'Approved'),
-        ('REJECTED', 'Rejected'),
-    ]
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        READY_TO_SEND = 'READY_TO_SEND', 'Ready to Send'
+        SUGGESTED = 'SUGGESTED', 'Suggested'
+        SUGGEST_REJECT = 'SUGGEST_REJECT', 'Suggest Reject'
+        APPROVED = 'APPROVED', 'Approved'
+        REJECTED = 'REJECTED', 'Rejected'
+        
     research_framework = models.ForeignKey(ResearchFramework, on_delete=models.CASCADE, related_name='research_questions')
     suggested_question = models.TextField(blank=True)
     motivation = models.TextField(blank=True)
@@ -70,7 +70,11 @@ class ResearchQuestion(models.Model):
         blank=True
     )
     justification = models.TextField(blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
+    status = models.CharField(
+        max_length=20, 
+        choices=Status.choices,  
+        default=Status.DRAFT     
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     framework_fields = models.JSONField(default=dict, blank=True)
@@ -95,15 +99,18 @@ class ResearchQuestion(models.Model):
             if not self.framework_fields.get(field_name, '').strip():
                 return False # A required field is missing or empty.
         
-        return True # All required fields are filled.
+        return True
+    
+    def can_submit_for_review(self) -> bool:
+        return self.status == self.Status.READY_TO_SEND
 
     def calculate_status(self):
         if self.is_framework_complete and self.has_question_text and self.has_motivation:
-            return 'READY_TO_SEND'
-        return 'DRAFT'
+            return self.Status.READY_TO_SEND
+        return self.Status.DRAFT
 
     def save(self, *args, **kwargs):
-        if self.status != "SUGGESTED": self.status = self.calculate_status()
+        if self.status != self.Status.SUGGESTED: self.status = self.calculate_status()
         super().save(*args, **kwargs)
 
     def __str__(self):

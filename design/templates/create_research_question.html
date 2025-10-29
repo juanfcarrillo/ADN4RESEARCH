@@ -15,11 +15,13 @@
     <hr class="my-4">
     <div id="fields-container" class="space-y-4">
     </div>
-    <div class="flex items-center mt-4 h-6">
+    <div class="flex items-center mt-4 h-6"> {# h-6 para evitar que el layout salte #}
         <div id="autosave-status"></div>
     </div>
+
 </form>
 <script>
+    // ⚙️ NUEVA SECCIÓN: Pasar datos de Django a JavaScript
     const QUESTION_DATA = {{ question_json|safe|default:"null" }};
     
     document.addEventListener('DOMContentLoaded', function() {
@@ -30,7 +32,8 @@
         const autosaveStatus = document.getElementById('autosave-status');
         let lastSavedData = '';
         let saveStatusTimeout;
-        
+
+        // ...existing code (debounce, triggerAutosave)...
         function debounce(func, delay) {
             let timeout;
             return function(...args) {
@@ -78,7 +81,7 @@
                     `;
                     saveStatusTimeout = setTimeout(() => {
                         autosaveStatus.innerHTML = '';
-                    }, 2000);
+                    }, 1500);
                     questionIdInput.value = data.id;
                     lastSavedData = currentDataString;
                 } else {
@@ -166,6 +169,7 @@
             loadFrameworkFields(frameworkId);
         });
 
+        // ✅ NUEVO: Auto-cargar campos si estamos editando
         if (QUESTION_DATA && QUESTION_DATA.research_framework_id) {
             loadFrameworkFields(QUESTION_DATA.research_framework_id);
         }

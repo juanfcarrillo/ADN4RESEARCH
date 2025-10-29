@@ -26,7 +26,7 @@ def create_research_question(request):
     
 def edit_research_question(request, question_id):
     try:
-        question = research_question_service.get_question_by_id(question_id)
+        question = research_question_service.get_research_question_by_id(question_id)
         frameworks = research_question_service.get_frameworks(request)
         
         # Convertimos los datos de la pregunta a JSON para pasarlos al script
@@ -36,6 +36,8 @@ def edit_research_question(request, question_id):
             "suggested_question": question.suggested_question,
             "motivation": question.motivation,
             "framework_fields": question.framework_fields,
+            "status": question.status,
+            "can_submit": research_question_service.can_submit_question(question) 
         }
 
         return render(request, 'create_research_question.html', {
@@ -48,7 +50,7 @@ def edit_research_question(request, question_id):
 
 def delete_research_question(request, question_id):
     try:
-        question = research_question_service.get_question_by_id(question_id)
+        question = research_question_service.get_research_question_by_id(question_id)
         question.delete()
         return redirect('design:questions_history')
     except question.DoesNotExist:
@@ -56,7 +58,7 @@ def delete_research_question(request, question_id):
     
 def load_questions_history(request):
     hardcoded_user = User.objects.get(id=1)
-    # asi se hace request.user 
+    # TODO: asi se hace: request.user 
     questions = research_question_service.get_all_questions_by_user(user=hardcoded_user)
     return render(request, 'question_history.html', {
         'questions': questions
@@ -65,10 +67,10 @@ def load_questions_history(request):
 def autosave_research_question(request):
     if request.method == 'POST':
         try:
-            # Pass the form data and the logged-in user to the service
             question = research_question_service.autosave_question(request.POST, request.user)
+            current_status = research_question_service.define_status(question)
             # Return the new ID and status, as expected by the frontend script
-            return JsonResponse({'id': question.id, 'status': question.status})
+            return JsonResponse({'id': question.id, 'status': question.status, 'can_submit': research_question_service.can_submit_question(question)})
         except ValueError as e:
             return JsonResponse({'error': str(e)}, status=400) # Bad Request
         except Exception as e:
