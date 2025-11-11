@@ -89,7 +89,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
-            BASE_DIR / "shared" / "templates",
+            BASE_DIR / 'ui' / "design" / "templates",
         ],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -210,7 +210,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = "static/"
+STATICFILES_DIRS = [
+    BASE_DIR / 'ui' / 'design', 
+]
+
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files (User uploaded files)
