@@ -10,8 +10,13 @@ ORQUESTACIÓN (Refactorizada para producción):
 6. DEDUPLICAR usando Deduplicator del dominio
 7. Construir summary completo: id_estrategia, total_por_fuente, total_bruto, total_unicos, no_ejecutadas, resultado
 8. Definir resultado: "complete" si no_ejecutadas está vacío, "partial" en caso contrario
+
+OPTIMIZACIÓN:
+- Ejecución PARALELA de conectores usando ThreadPoolExecutor
+- Las búsquedas son I/O bound (espera de red), los threads funcionan perfecto
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from apps.acquisition.discovery.domain.interfaces.i_academic_connector import IAcademicConnector
 from apps.acquisition.discovery.domain.entities.discovery_result import DiscoveryResult
@@ -53,7 +58,8 @@ class DiscoveryService:
         self,
         strategy_id: str,
         translation_statuses: dict,
-        supported_sources: list[str]
+        supported_sources: list[str],
+        max_results_per_source: int = 25
     ) -> DiscoveryResult:
         """
         Execute the discovery process (FASE 4: con trazabilidad completa).
@@ -85,6 +91,7 @@ class DiscoveryService:
             translation_statuses: Dictionary with translation status for each source
                                   Format: {source: {"status": str, "query": Optional[str]}}
             supported_sources: List of sources to query
+            max_results_per_source: Maximum results to fetch from each source (default: 25)
 
         Returns:
             DiscoveryResult with unique studies (deduplicados) and summary completo con trazabilidad
@@ -133,7 +140,7 @@ class DiscoveryService:
 
         # 4. Consultar fuentes ejecutables (con manejo robusto de excepciones)
         all_studies, total_por_fuente = self._fetch_studies(
-            executable_sources, sane_statuses, no_ejecutadas
+            executable_sources, sane_statuses, no_ejecutadas, max_results_per_source
         )
 
         # 5. Deduplicar (dominio)
@@ -243,10 +250,15 @@ class DiscoveryService:
         self,
         executable_sources: list[str],
         translation_statuses: dict,
-        no_ejecutadas: dict[str, str]
+        no_ejecutadas: dict[str, str],
+        max_results: int = 25
     ) -> tuple[list[Study], dict[str, int]]:
         """
-        Consultar cada fuente ejecutable con manejo robusto de excepciones.
+        Consultar cada fuente ejecutable EN PARALELO con manejo robusto de excepciones.
+
+        OPTIMIZACIÓN: Usa ThreadPoolExecutor para ejecutar todas las búsquedas
+        simultáneamente. El tiempo total = max(tiempo_fuente1, tiempo_fuente2, ...)
+        en lugar de suma de tiempos.
 
         CRÍTICO PARA PRODUCCIÓN: Si una fuente falla (timeout, error 500, etc.),
         NO detener todo el proceso. Registrar el error y continuar con las demás.
@@ -255,6 +267,7 @@ class DiscoveryService:
             executable_sources: Fuentes a consultar
             translation_statuses: Estados de traducción
             no_ejecutadas: Dict para registrar fuentes que fallen (se modifica in-place)
+            max_results: Máximo de resultados por fuente
 
         Returns:
             (all_studies, total_por_fuente)
@@ -262,32 +275,116 @@ class DiscoveryService:
         all_studies: list[Study] = []
         total_por_fuente: dict[str, int] = {}
 
-        for source in executable_sources:
-            connector = self.connectors[source]
-            query = translation_statuses[source].get("query", "")
+        if not executable_sources:
+            return all_studies, total_por_fuente
 
-            try:
-                # PUNTO CRÍTICO: Aquí es donde puede fallar en producción
-                studies = list(connector.search(query))
+        # Ejecutar búsquedas EN PARALELO
+        with ThreadPoolExecutor(max_workers=len(executable_sources)) as executor:
+            # Crear futures para cada fuente
+            future_to_source = {
+                executor.submit(
+                    self._fetch_single_source,
+                    source,
+                    translation_statuses[source].get("query", ""),
+                    max_results
+                ): source
+                for source in executable_sources
+            }
 
-                # Éxito: acumular resultados
-                all_studies.extend(studies)
-                total_por_fuente[source] = len(studies)
+            # Recolectar resultados conforme terminan
+            for future in as_completed(future_to_source):
+                source = future_to_source[future]
 
-                logger.info(f"✓ {source}: {len(studies)} estudios obtenidos")
+                try:
+                    converted = future.result()
 
-            except Exception as e:
-                # NO detener todo el proceso por una fuente caída
-                error_msg = f"connection_error: {type(e).__name__}: {str(e)}"
-                no_ejecutadas[source] = error_msg
+                    # Éxito: acumular resultados
+                    all_studies.extend(converted)
+                    total_por_fuente[source] = len(converted)
 
-                logger.error(
-                    f"✗ {source}: Error al consultar conector. "
-                    f"Continuando con otras fuentes. Error: {e}",
-                    exc_info=True
-                )
+                    logger.info(f"✓ {source}: {len(converted)} estudios obtenidos")
+
+                except Exception as e:
+                    # NO detener todo el proceso por una fuente caída
+                    error_msg = f"connection_error: {type(e).__name__}: {str(e)}"
+                    no_ejecutadas[source] = error_msg
+
+                    logger.error(
+                        f"✗ {source}: Error al consultar conector. "
+                        f"Continuando con otras fuentes. Error: {e}",
+                        exc_info=True
+                    )
 
         return all_studies, total_por_fuente
+
+    def _fetch_single_source(
+        self,
+        source: str,
+        query: str,
+        max_results: int
+    ) -> list[Study]:
+        """
+        Consulta una fuente individual y convierte resultados a Study.
+
+        Args:
+            source: Nombre de la fuente
+            query: Query de búsqueda
+            max_results: Máximo de resultados
+
+        Returns:
+            Lista de Study convertidos
+
+        Raises:
+            Exception: Si la búsqueda falla
+        """
+        connector = self.connectors[source]
+
+        # PUNTO CRÍTICO: Aquí es donde puede fallar en producción
+        raw_results = list(connector.search(query, max_results=max_results))
+
+        # Convertir resultados crudos (dicts) a entidades Study del dominio,
+        # respetando también conectores que ya retornan Study (mocks).
+        converted: list[Study] = []
+
+        for item in raw_results:
+            if isinstance(item, Study):
+                converted.append(item)
+                continue
+
+            if isinstance(item, dict):
+                title = item.get("title")
+                link = item.get("link")
+                source_name = item.get("source") or source
+
+                if not title or not link:
+                    logger.warning(
+                        f"{source}: Resultado descartado por falta de title/link: {item}"
+                    )
+                    continue
+
+                study = Study.create_discovered(
+                    title=title,
+                    link=link,
+                    source=source_name,
+                    doi=item.get("doi"),
+                )
+
+                # Enriquecer con metadatos si existen
+                if "authors" in item:
+                    study.authors = item.get("authors")
+                if "abstract" in item:
+                    study.abstract = item.get("abstract")
+                if "year" in item:
+                    study.year = item.get("year")
+
+                converted.append(study)
+                continue
+
+            logger.warning(
+                f"{source}: Tipo de resultado inesperado {type(item)}, se descarta"
+            )
+
+        return converted
 
     def _build_result(
         self,
