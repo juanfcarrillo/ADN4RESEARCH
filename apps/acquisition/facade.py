@@ -193,6 +193,8 @@ class AcquisitionFacade:
         Args:
             design_strategy_id: ID de la estrategia en design.SearchStrategy
             preview_result: Resultado del preview con estudios y estrategia
+            design_strategy_id: ID de la estrategia en design.SearchStrategy
+            preview_result: Resultado del preview con estudios y estrategia
             user: Usuario que confirma la persistencia
 
         Returns:
