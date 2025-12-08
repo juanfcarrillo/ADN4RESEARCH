@@ -829,6 +829,20 @@ honcho = ["honcho (>=2.0.0,<3)"]
 reload = ["django-browser-reload (>=1.21.0,<2)"]
 
 [[package]]
+name = "dotenv"
+version = "0.9.9"
+description = "Deprecated package"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "dotenv-0.9.9-py2.py3-none-any.whl", hash = "sha256:29cf74a087b31dafdb5a446b6d7e11cbce8ed2741540e2339c69fbef92c94ce9"},
+]
+
+[package.dependencies]
+python-dotenv = "*"
+
+[[package]]
 name = "faker"
 version = "37.12.0"
 description = "Faker is a Python package that generates fake data for you."
@@ -3383,4 +3397,4 @@ dev = ["pytest", "setuptools"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13"
-content-hash = "255c93b3123d641aca4a08c464b781c6c13bda352e808f6f4b6bde40cbf330fc"
+content-hash = "58255b4f32bffd565416eb82098b94b2ed24c18aae220a75abaa962bf8558f4e"

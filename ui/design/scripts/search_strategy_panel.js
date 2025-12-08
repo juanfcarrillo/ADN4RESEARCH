@@ -2,70 +2,142 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('strategy_versions_modal');
     const tableBody = document.getElementById('versions-table-body');
     const viewButtons = document.querySelectorAll('.view-versions-btn');
-
-    // 1. Escuchar clicks en los botones de "Ver Historial" (Ojo)
     viewButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
             const questionId = btn.dataset.id;
             openHistoryModal(questionId);
         });
     });
-
-    // 2. Función para abrir modal y cargar datos
     function openHistoryModal(questionId) {
-        // Limpiar tabla y mostrar loading
         tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-base-content/50"><span class="loading loading-spinner"></span> Loading history...</td></tr>';
-        
         modal.showModal();
 
-        // Construir URL dinámica (reemplazando el placeholder 0)
-        // versionsApiUrl viene definida en el HTML
         const url = versionsApiUrl.replace('0', questionId);
 
         fetch(url)
             .then(response => response.json())
-            .then(data => {
-                renderTable(data.versions, questionId);
-            })
+            .then(data => renderTable(data.versions, questionId))
             .catch(error => {
                 console.error('Error:', error);
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-error py-4">Error loading versions.</td></tr>';
             });
     }
-
-    // 3. Renderizar Tabla
     function renderTable(versions, questionId) {
         if (!versions || versions.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-base-content/50">No versions found. Build a strategy first.</td></tr>';
             return;
         }
 
-        tableBody.innerHTML = ''; // Limpiar
+        tableBody.innerHTML = '';
 
         versions.forEach(ver => {
             const row = document.createElement('tr');
             row.className = "hover";
-            
-            // Lógica para truncar el string largo
-            const shortString = ver.string.length > 50 ? ver.string.substring(0, 50) + '...' : ver.string;
 
             row.innerHTML = `
                 <td class="font-bold text-center">${ver.version}</td>
                 <td title="${ver.string}">
-                    <div class="font-mono text-xs break-all">${shortString}</div>
+                    <div class="font-mono text-xs whitespace-normal break-words">${ver.string}</div>
                 </td>
                 <td class="text-center font-semibold">${ver.total_found}</td>
                 <td class="text-xs text-base-content/70">${ver.date}</td>
                 <td class="text-center">
-                    <a href="${builderUrlBase}?question_id=${questionId}&version_id=${ver.id}" 
-                       class="btn btn-xs btn-outline btn-primary gap-1"
-                       title="Load this version into the Builder">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                        Load
-                    </a>
+                    <div class="flex justify-center gap-2">
+                        <a href="${builderUrlBase}?question_id=${questionId}&version_id=${ver.id}" type="button" 
+                                class="btn btn-xs btn-primary text-white btn-circle action-btn" 
+                                data-action="reload"
+                                title="Reload this version to Builder">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                            </svg>
+                        </a>
+
+                        <button type="button" 
+                                class="btn btn-xs btn-success text-white btn-circle action-btn" 
+                                data-action="approve"
+                                data-strategy-id="${ver.strategy_id}"
+                                title="Approve Strategy">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                        </button>
+                        
+                        <button type="button"
+                                class="btn btn-xs btn-error btn-outline btn-circle action-btn"
+                                data-action="reject"
+                                data-strategy-id="${ver.strategy_id}"
+                                title="Reject Strategy">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        </button>
+
+                        <button type="button" 
+                                class="btn btn-ghost btn-xs text-base-content/60 hover:bg-base-300 action-btn delete-btn" 
+                                data-action="delete"
+                                data-version-id="${ver.id}"
+                                title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m9 0H6" /></svg>
+                        </button>
+                    </div>
                 </td>
             `;
             tableBody.appendChild(row);
         });
+    }
+
+    // 4. Manejo de Acciones (Event Delegation)
+    tableBody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.action-btn');
+        if (!btn) return;
+
+        const action = btn.dataset.action; // 'approve', 'reject', 'delete'
+        const strategyId = btn.dataset.strategyId;
+        const versionId = btn.dataset.versionId;
+
+        if (action === 'approve') {
+            performAction(approveUrlBase.replace('0', strategyId), 'Approve');
+        } else if (action === 'reject') {
+            performAction(rejectUrlBase.replace('0', strategyId), 'Reject');
+        } else if (action === 'delete') {
+            performAction(deleteVersionApiUrl.replace('0', versionId), 'Delete');
+        }
+    });
+
+    // 5. Llamada AJAX para Aprobar/Rechazar
+    function performAction(url, actionName) {
+        if (!confirm(`Are you sure you want to ${actionName} this strategy?`)) return;
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url; // Seguir redirección del backend
+                } else {
+                    // Si el backend no redirige (devuelve JSON), recargar
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Action failed:', error);
+                alert('Action failed. See console.');
+            });
+    }
+
+    // Helper CSRF
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
     }
 });
