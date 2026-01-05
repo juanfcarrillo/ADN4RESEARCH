@@ -6,7 +6,7 @@ from django.db import transaction
 from apps.design.exceptions.research_question_exceptions import InvalidFrameworkFieldsError, ProjectNotFoundError, QuestionReviewError, QuestionSubmissionError, QuestionNotFoundError, ResearchQuestionError
 from apps.project.structure.models.project_models import Project
 from django.contrib.auth.models import User
-from apps.design.shared.models.design_phase import DesignPhase
+from apps.design.design_phase_logic.models.design_phase import DesignPhase
 from django.utils import timezone
 
 class ResearchQuestionService:
@@ -249,17 +249,15 @@ class ResearchQuestionService:
         return question
 
     @transaction.atomic
-    def consolidate_questions(self, project_id: int, user):
+    def finalize_questions_stage(self, project_id: int, user):
         project, design_phase = self._validate_consolidation_prerequisites(project_id, user)
+        
         affected_rows = design_phase.research_questions.filter(
             status=ResearchQuestion.Status.SUGGESTED
         ).update(
             status=ResearchQuestion.Status.REJECTED,
             justification="Rejected automatically via consolidation."
         )
-        design_phase.current_stage = DesignPhase.DesignStage.CRITERIA_DEFINITION
-        design_phase.save()
-
         return {
             "rejected_automatically": affected_rows,
             "total_approved": design_phase.research_questions.filter(status=ResearchQuestion.Status.APPROVED).count()

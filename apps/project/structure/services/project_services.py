@@ -4,7 +4,7 @@ from apps.project.structure.models.project_models import Project, ResearchFramew
 from typing import List
 from django.db import transaction
 from django.db.models import Q
-from apps.design.shared.models.design_phase import DesignPhase
+from apps.design.design_phase_logic.models.design_phase import DesignPhase
 
 
 class ProjectService:
@@ -88,7 +88,6 @@ class ProjectService:
         Obtiene las preguntas buscando explícitamente la fase asociada al proyecto.
         """
         try:
-            # SEMÁNTICA CLARA: "Dame la fase cuyo project_id sea X"
             design_phase = DesignPhase.objects.get(project_id=project_id)
             return design_phase.research_questions.all().order_by('-created_at')
         except DesignPhase.DoesNotExist:
