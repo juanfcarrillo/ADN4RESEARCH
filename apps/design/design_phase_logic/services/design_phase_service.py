@@ -11,24 +11,60 @@ from apps.acquisition.facade import get_acquisition_facade
 
 
 class DesignPhaseService:
+    def _consolidate_stage(
+        self,
+        project_id: int,
+        user,
+        current_stage: DesignPhase.DesignStage,
+        next_stage: DesignPhase.DesignStage,
+        finalize_callback: callable = None
+    ) -> tuple:
+
+        phase = DesignPhase.objects.get(pk=project_id)
+        # 1. Validar etapa actual
+        if phase.current_stage != current_stage:
+            raise ValidationError(
+                f"Cannot consolidate {current_stage.label}. "
+                f"Current stage is {phase.current_stage}"
+            )
+        # 2. Ejecutar lógica de dominio específica (si existe)
+        callback_result = None
+        if finalize_callback:
+            callback_result = finalize_callback(project_id, user)
+        # 3. Transición de estado (incluye actualización de cronograma automáticamente)
+        self._transition_stage(phase, next_stage)
+        return phase, callback_result
+
+    @transaction.atomic
+    def consolidate_creation_stage(self, project_id: int, user):
+        """
+        Cierra la etapa de Creación e inicia Discusión.
+        No requiere lógica de dominio específica.
+        """
+        phase, _ = self._consolidate_stage(
+            project_id=project_id,
+            user=user,
+            current_stage=DesignPhase.DesignStage.RQ_CREATION,
+            next_stage=DesignPhase.DesignStage.RQ_DISCUSSION,
+            finalize_callback=None
+        )
+        return phase
 
     @transaction.atomic
     def consolidate_research_question_stage(self, project_id: int, user):
         """
         Cierra la etapa de Preguntas e inicia Criterios.
         """
-        phase = DesignPhase.objects.get(pk=project_id)
-
-        if phase.current_stage != DesignPhase.DesignStage.RQ_DISCUSSION:
-            raise ValidationError(f"Cannot consolidate Questions. Current stage is {phase.current_stage}")
-
-        # 1. Ejecutar lógica de dominio específica del sub-módulo
-        service = ResearchQuestionService()
-        service.finalize_questions_stage(project_id, user)
-
-        # 2. Transición de estado con auditoría
-        self._transition_stage(phase, DesignPhase.DesignStage.CRITERIA_DEFINITION)
-
+        def finalize_questions(proj_id, usr):
+            service = ResearchQuestionService()
+            return service.finalize_questions_stage(proj_id, usr)
+        phase, _ = self._consolidate_stage(
+            project_id=project_id,
+            user=user,
+            current_stage=DesignPhase.DesignStage.RQ_DISCUSSION,
+            next_stage=DesignPhase.DesignStage.CRITERIA_DEFINITION,
+            finalize_callback=finalize_questions
+        )
         return phase
 
     @transaction.atomic
@@ -36,15 +72,16 @@ class DesignPhaseService:
         """
         Cierra la etapa de Criterios e inicia Estrategia de Búsqueda.
         """
-        phase = DesignPhase.objects.get(pk=project_id)
-        if phase.current_stage != DesignPhase.DesignStage.CRITERIA_DEFINITION:
-            raise ValidationError(f"Cannot consolidate Criteria. Current stage is {phase.current_stage}")
-        # 1. Ejecutar lógica de dominio específica del sub-módulo
-        service = EligibilityCriterionService()
-        service.finalize_criteria_stage(project_id, user)
-        # 2. Transición de estado con auditoría
-        self._transition_stage(phase, DesignPhase.DesignStage.SEARCH_STRATEGY)
-
+        def finalize_criteria(proj_id, usr):
+            service = EligibilityCriterionService()
+            return service.finalize_criteria_stage(proj_id, usr)
+        phase, _ = self._consolidate_stage(
+            project_id=project_id,
+            user=user,
+            current_stage=DesignPhase.DesignStage.CRITERIA_DEFINITION,
+            next_stage=DesignPhase.DesignStage.SEARCH_STRATEGY,
+            finalize_callback=finalize_criteria
+        )
         return phase
 
     @transaction.atomic
@@ -77,13 +114,42 @@ class DesignPhaseService:
                 raise ValidationError(f"Error persisting strategy {strategy_id}: {str(e)}")
         return phase
 
+    @transaction.atomic
+    def check_deadlines_and_consolidate(self, system_user):
+        """
+        Checks for expired stages and consolidates them automatically.
+        Currently only enforces RQ_CREATION deadline.
+        """
+        active_phases = DesignPhase.objects.filter(
+            current_stage=DesignPhase.DesignStage.RQ_CREATION,
+            is_active=True
+        )
+        today = timezone.now().date()
+        count = 0
+
+        for phase in active_phases:
+            try:
+                plan = DesignStagePlan.objects.get(
+                    phase=phase,
+                    stage=DesignPhase.DesignStage.RQ_CREATION
+                )
+                if today >= plan.planned_end_date:
+                    self.consolidate_creation_stage(phase.project_id, system_user)
+                    count += 1
+            except DesignStagePlan.DoesNotExist:
+                continue
+            except Exception:
+                # Log error but continue processing others
+                continue
+        return count
+
     def _transition_stage(self, phase: DesignPhase, next_stage: str):
         """
         Método helper privado para manejar la lógica repetitiva de cerrar logs y abrir nuevos.
-        Garantiza la trazabilidad (RNF-03).
+        Garantiza la trazabilidad(RNF - 03).
+        También reprograma el inicio de la siguiente etapa a HOY(Dynamic Schedule).
         """
         # 1. Cerrar el log de la etapa actual
-        # Buscamos el último log abierto para esta etapa
         current_log = DesignStageLog.objects.filter(
             phase=phase,
             stage=phase.current_stage,
@@ -93,11 +159,21 @@ class DesignPhaseService:
         if current_log:
             current_log.end_date = timezone.now()
             current_log.save()
+
         # 2. Actualizar la fase
         phase.current_stage = next_stage
-        phase.save()  # El método save() del modelo maneja el is_active = False si es FINISHED
-        # 3. Crear el log para la nueva etapa (si no es el estado final de cierre)
+        phase.save()
+
+        # 3. Dynamic Schedule: Reset planned start date of next stage to TODAY
         if next_stage != DesignPhase.DesignStage.FINISHED:
+            try:
+                next_plan = DesignStagePlan.objects.get(phase=phase, stage=next_stage)
+                next_plan.planned_start_date = timezone.now().date()
+                next_plan.save()
+            except DesignStagePlan.DoesNotExist:
+                pass
+
+            # 4. Crear el log para la nueva etapa
             DesignStageLog.objects.create(
                 phase=phase,
                 stage=next_stage,

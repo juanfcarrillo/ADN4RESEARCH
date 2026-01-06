@@ -136,8 +136,31 @@ def save_visual_strategy(request, project_id, strategy_id, project):
 
         return JsonResponse({
             'status': 'success',
-            'redirect_url': build_design_url(project_id, f'search-strategy/{strategy_id}/results/'),
+            'redirect_url': build_design_url(project_id, f'strategies/{strategy_id}/results/'),
             'final_string': updated_strategy.final_search_string
+        })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@project_member_required
+@require_POST
+def preview_search_string(request, project_id, project):
+    try:
+        data = json.loads(request.body)
+        visual_data = data.get('visual_data')
+
+        if not visual_data:
+            return JsonResponse({'error': 'No data provided'}, status=400)
+
+        # Use the service's builder directly to generate the string
+        # We don't save anything, just return the string
+        preview_string = search_strategy_service.string_builder.build_from_json(visual_data)
+
+        return JsonResponse({
+            'status': 'success',
+            'preview_string': preview_string
         })
 
     except Exception as e:
@@ -220,7 +243,7 @@ def approve_strategy(request, project_id, strategy_id, project):
             justification=justification
         )
         messages.success(request, f"Strategy approved successfully!")
-        return redirect(build_design_url(project_id, 'search-strategy/'))
+        return redirect(build_design_url(project_id, 'strategies/'))
     except Exception as e:
         messages.error(request, str(e))
         return redirect(request.META.get('HTTP_REFERER', '/'))
@@ -242,7 +265,7 @@ def reject_strategy(request, project_id, strategy_id, project):
             justification=justification
         )
         messages.warning(request, "Strategy rejected.")
-        return redirect(build_design_url(project_id, 'search-strategy/'))
+        return redirect(build_design_url(project_id, 'strategies/'))
     except Exception as e:
         messages.error(request, str(e))
         return redirect(request.META.get('HTTP_REFERER', '/'))
@@ -264,7 +287,7 @@ def consolidate_search_strategy_stage_view(request, project_id, project):
     try:
         if project.owner != request.user:
             messages.error(request, "Only the project owner can consolidate the stage.")
-            return redirect(build_design_url(project_id, 'search-strategy/'))
+            return redirect(build_design_url(project_id, 'strategies/'))
 
         design_phase_service.consolidate_search_strategy_stage(project_id, request.user)
         messages.success(request, "Stage consolidated successfully! Design Phase is now Finalized.")
@@ -273,4 +296,4 @@ def consolidate_search_strategy_stage_view(request, project_id, project):
 
     except Exception as e:
         messages.error(request, f"Error consolidating stage: {str(e)}")
-        return redirect(build_design_url(project_id, 'search-strategy/'))
+        return redirect(build_design_url(project_id, 'strategies/'))
