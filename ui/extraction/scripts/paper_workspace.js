@@ -1,94 +1,101 @@
-// ui/extraction/static/scripts/paper_workspace.js
-
 /**
  * Paper Workspace - Orquestador Principal
- * Coordina los componentes: PDFViewer, TagManager, QuoteManager
+ * Coordina PDFViewer, QuoteManager y TagManager usando eventos
  */
 
-console.log('🟢 paper_workspace.js loaded');
+class PaperWorkspace {
+    constructor(config) {
+        this.config = config;
+        this.pdfViewer = null;
+        this.quoteManager = null;
+        this.tagManager = null;
+        
+        console.log('🚀 PaperWorkspace initialized');
+    }
 
-// Importar módulos (simulado, ya que no usamos ES6 modules)
-// En producción considera usar webpack o vite
+    async init() {
+        try {
+            // 1. Inicializar componentes
+            this.pdfViewer = new PDFViewer(this.config);
+            this.quoteManager = new QuoteManager(this.config);
+            this.tagManager = new TagManager(this.config);
 
-const CONFIG = window.WORKSPACE_CONFIG || {};
+            // 2. Configurar event listeners globales
+            this.setupEventListeners();
 
-// Validar configuración
-if (!CONFIG.pdfUrl || !CONFIG.apiUrl || !CONFIG.csrfToken) {
-    console.error('❌ CRITICAL: Incomplete configuration');
-    alert('Error de configuración. Recarga la página.');
-    throw new Error('Missing WORKSPACE_CONFIG');
-}
+            // 3. Inicializar componentes
+            this.quoteManager.init();
+            this.tagManager.init();
+            await this.pdfViewer.init();
 
-console.log('✅ Configuration loaded');
+            console.log('✅ Workspace ready');
+        } catch (error) {
+            console.error('❌ Init failed:', error);
+        }
+    }
 
-// ========================================
-// INICIALIZACIÓN DE COMPONENTES
-// ========================================
+    setupEventListeners() {
+        // Selección de texto
+        document.addEventListener('mouseup', (e) => {
+            const selection = window.getSelection();
+            const text = selection.toString().trim();
+            if (text.length < 10) return;
 
-let pdfViewer = null;
-let tagManager = null;
-let quoteManager = null;
-
-// ui/extraction/static/scripts/paper_workspace.js
-
-async function initWorkspace() {
-    console.log('🚀 Initializing workspace...');
-
-    try {
-        // 1. Inicializar Tag Manager (síncrono)
-        tagManager = new TagManager({
-            containerSelector: '#tags-container',
-            searchInputSelector: '#tag-search-input'
-        });
-        tagManager.init();
-
-        // 2. Inicializar Quote Manager INMEDIATAMENTE
-        quoteManager = new QuoteManager({
-            apiUrl: CONFIG.apiUrl,
-            deleteApiUrl: CONFIG.deleteApiUrl,
-            csrfToken: CONFIG.csrfToken,
-            paperId: CONFIG.paperId,
-            pdfViewer: null,  // ⬅️ null temporalmente
-            tagManager: tagManager
-        });
-        quoteManager.init();
-
-        console.log('📊 CONFIG.existingQuotes:', CONFIG.existingQuotes);
-        console.log('📊 Type:', typeof CONFIG.existingQuotes);
-        console.log('📊 Is Array:', Array.isArray(CONFIG.existingQuotes));
-        console.log('📊 Length:', CONFIG.existingQuotes?.length);
-
-        // 3. Inicializar PDF Viewer (asíncrono, SIN await)
-        pdfViewer = new PDFViewer({
-            containerSelector: '#pdf-viewer-container',
-            loaderSelector: '#pdf-loader',
-            pdfUrl: CONFIG.pdfUrl,
-            existingQuotes: CONFIG.existingQuotes,
-            onSelectionChange: (selection) => {  // ✅ NUEVO: Callback directo
-                quoteManager.handleTextSelection(selection);
+            let pageNumber = 1;
+            let node = selection.anchorNode;
+            if (node && node.nodeType === 3) node = node.parentNode;
+            if (node) {
+                const pageContainer = node.closest('.page-container');
+                if (pageContainer) {
+                    pageNumber = parseInt(pageContainer.dataset.pageNumber) || 1;
+                }
             }
+
+            // Disparar evento para QuoteManager
+            window.dispatchEvent(new CustomEvent('text:selected', {
+                detail: { text, page: pageNumber }
+            }));
         });
 
-        // ✅ NO usar await - dejamos que cargue en paralelo
-        pdfViewer.init().then(() => {
-            console.log('✅ PDF Viewer fully loaded');
-
-            // ✅ Conectar pdfViewer con quoteManager después de cargar
-            quoteManager.pdfViewer = pdfViewer;
-        }).catch((error) => {
-            console.error('❌ Error loading PDF:', error);
+        // Cuando se crea una quote, actualizar PDF
+        window.addEventListener('quote:created', (e) => {
+            this.config.existingQuotes = this.config.existingQuotes || [];
+            this.config.existingQuotes.push(e.detail.quote);
+            this.pdfViewer.highlightNewQuote(e.detail.quote);
         });
-
-        console.log('✅ Workspace initialized (PDF loading in background)');
-
-    } catch (error) {
-        console.error('❌ Error initializing workspace:', error);
     }
 }
 
-// Inicializar cuando el DOM esté listo
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initWorkspace);
-} else {
-    initWorkspace();
-}
+// Funciones globales
+window.scrollToQuote = function(quoteId, page) {
+    const pageEl = document.querySelector(`[data-page-number="${page}"]`);
+    if (pageEl) {
+        pageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+};
+
+window.deleteQuote = async function(quoteId) {
+    if (!confirm('¿Eliminar esta extracción?')) return;
+    
+    const url = window.PAPER_CONFIG.quoteDeleteUrlTemplate.replace('{id}', quoteId);
+    try {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': window.PAPER_CONFIG.csrfToken }
+        });
+        if (response.ok) location.reload();
+        else alert('Error al eliminar');
+    } catch (error) {
+        alert('Error de red');
+    }
+};
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', () => {
+    if (!window.PAPER_CONFIG) {
+        console.error('❌ PAPER_CONFIG not found!');
+        return;
+    }
+    const workspace = new PaperWorkspace(window.PAPER_CONFIG);
+    workspace.init();
+});
