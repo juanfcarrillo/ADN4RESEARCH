@@ -67,6 +67,26 @@ class ExtractionPhaseDetailView(LoginRequiredMixin, DetailView):
         return context
     
     def _load_tab_data(self, context, phase, tab, is_owner, is_researcher):
+<<<<<<< HEAD
+        """
+        Cargar datos específicos del tab activo (lazy loading).
+        """
+        
+        if tab == 'tags':
+            # Tags con optimización
+            all_tags = phase.tags.all().select_related('rq_related').order_by('-created_at')
+            context['tags'] = all_tags
+            
+            # ✅ Calcular counts por tipo
+            context['deductive_tags_count'] = all_tags.filter(type='DEDUCTIVE').count()
+            context['inductive_tags_count'] = all_tags.filter(type='INDUCTIVE').count()
+            
+            if is_owner:
+                service = PhaseLifecycleService()
+                coverage_report = service.get_protocol_coverage(phase)
+                context['coverage_report'] = coverage_report
+                context['can_open_phase'] = coverage_report.is_fully_covered
+=======
         """Cargar datos específicos del tab activo (lazy loading)."""
         
         if tab == 'tags':
@@ -77,6 +97,7 @@ class ExtractionPhaseDetailView(LoginRequiredMixin, DetailView):
                 report = service.get_protocol_coverage(phase)
                 context['coverage_report'] = report
                 context['can_open_phase'] = report.is_fully_covered
+>>>>>>> develop
         
         elif tab == 'studies':
             papers_qs = PaperExtraction.objects.filter(extraction_phase=phase)
@@ -104,6 +125,31 @@ class PhaseConfigUpdateView(LoginRequiredMixin, OwnerRequiredMixin, UpdateView):
     """
     Actualizar configuración de una fase.
     Usa UpdateView genérico de Django.
+<<<<<<< HEAD
+    
+    Referencia: https://docs.djangoproject.com/en/stable/ref/class-based-views/generic-editing/#updateview
+    """
+    
+    model = ExtractionPhase
+    form_class = ExtractionPhaseConfigForm
+    
+    def form_valid(self, form):
+        """
+        Validar estado antes de guardar.
+        
+        Business Rules:
+        - No se puede editar una fase CLOSED
+        """
+        if self.object.status == ExtractionStatusChoices.CLOSED:
+            messages.error(self.request, "No se puede editar una fase cerrada.")
+            return redirect(self.get_success_url())
+        
+        messages.success(self.request, "Configuración actualizada exitosamente.")
+        return super().form_valid(form)
+    
+    def get_success_url(self):
+        """Redirigir al dashboard de la fase después de guardar."""
+=======
     """
     
     model = ExtractionPhase
@@ -119,25 +165,62 @@ class PhaseConfigUpdateView(LoginRequiredMixin, OwnerRequiredMixin, UpdateView):
         return super().form_valid(form)
     
     def get_success_url(self):
+>>>>>>> develop
         return reverse('extraction:phase_detail', args=[self.object.pk])
 
 
 class PhaseOpenView(LoginRequiredMixin, OwnerRequiredMixin, View):
     """
     Transición de estado: CONFIG -> OPEN
+<<<<<<< HEAD
+    
+    Business Rules:
+    - Solo el owner puede abrir una fase
+    - La fase debe estar en estado CONFIG
+    - Todas las RQs del protocolo deben estar cubiertas por tags deductivos aprobados
+    
+    Referencia: https://docs.djangoproject.com/en/stable/ref/class-based-views/base/#view
     """
     
     def post(self, request, pk):
+        """
+        Procesar solicitud de apertura de fase.
+        
+        Args:
+            request: HTTP request
+            pk: ID de la fase a abrir
+            
+        Returns:
+            Redirect al dashboard de la fase
+        """
+=======
+    """
+    
+    def post(self, request, pk):
+>>>>>>> develop
         phase = get_object_or_404(ExtractionPhase, pk=pk)
         service = PhaseLifecycleService()
         
         try:
+            # ✅ Intentar abrir la fase (valida cobertura automáticamente)
             service.attempt_open_phase(phase)
+            
             messages.success(
                 request,
+<<<<<<< HEAD
+                "✅ ¡Fase Abierta! Los investigadores pueden comenzar la extracción."
+=======
                 "¡Fase Abierta! Los investigadores pueden empezar."
+>>>>>>> develop
             )
+            
         except BusinessRuleViolation as e:
+            # ✅ Capturar error de negocio y mostrar mensaje
             messages.error(request, str(e))
         
+<<<<<<< HEAD
+        # ✅ Redirigir al tab de tags para ver el estado
+        return redirect(f"{reverse('extraction:phase_detail', args=[pk])}?tab=tags")
+=======
         return redirect('extraction:phase_detail', pk=pk)
+>>>>>>> develop
