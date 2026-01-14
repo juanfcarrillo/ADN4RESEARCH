@@ -18,7 +18,7 @@ from django.views.generic import DetailView, View
 from .forms import QuoteForm
 from .models import PaperExtraction, Quote, PaperExtractionStatusChoices
 from apps.extraction.core.services import PaperExtractionService
-from apps.extraction.shared.exceptions import BusinessRuleViolation
+from apps.extraction.shared.mixins import ProjectMemberRequiredMixin
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +71,13 @@ class PaperAccessMixin(UserPassesTestMixin):
         return None
 
 
-class PaperDetailView(LoginRequiredMixin, PaperAccessMixin, DetailView):
+class PaperDetailView(LoginRequiredMixin, ProjectMemberRequiredMixin, PaperAccessMixin, DetailView):
     """
     Vista del workspace de extracción de un paper.
     """
     
     model = PaperExtraction
-    template_name = 'paper_detail.html'
+    template_name = 'extraction/templates/paper_detail.html'
     context_object_name = 'paper'
     
     def get_context_data(self, **kwargs):
@@ -118,29 +118,30 @@ class PaperDetailView(LoginRequiredMixin, PaperAccessMixin, DetailView):
         )
         
         # URLs para JavaScript
-        context['pdf_url'] = reverse('extraction:paper_pdf', args=[paper.pk])
-        context['quote_create_url'] = reverse('extraction:quote_create')
+        project_id = paper.extraction_phase.project_id
+        context['pdf_url'] = reverse('extraction:core:paper_pdf', kwargs={'project_id': project_id, 'pk': paper.pk})
+        context['quote_create_url'] = reverse('extraction:core:quote_create', kwargs={'project_id': project_id})
         context['quote_delete_url_template'] = reverse(
-            'extraction:quote_delete', 
-            args=[0]
+            'extraction:core:quote_delete', 
+            kwargs={'project_id': project_id, 'pk': 0}
         ).replace('/0/', '/{id}/')
         
         logger.info(
             f"Paper workspace loaded: paper_id={paper.id}, "
             f"user={self.request.user.username}, quotes_count={len(context['quotes'])}"
         )
-        context['paper_complete_url'] = reverse('extraction:paper_complete', args=[paper.pk])
+        context['paper_complete_url'] = reverse('extraction:core:paper_complete', kwargs={'project_id': project_id, 'pk': paper.pk})
 
         
         return context
 
 
-class PaperPDFView(LoginRequiredMixin, PaperAccessMixin, View):
+class PaperPDFView(LoginRequiredMixin, ProjectMemberRequiredMixin, PaperAccessMixin, View):
     """
     Sirve archivos PDF de forma segura.
     """
     
-    def get(self, request, pk):
+    def get(self, request, project_id, pk):
         """Servir PDF."""
         paper = get_object_or_404(PaperExtraction, pk=pk)
         
@@ -211,7 +212,7 @@ class PaperPDFView(LoginRequiredMixin, PaperAccessMixin, View):
             .replace('\\', '-')
         )[:100]
 
-class PaperCompleteView(LoginRequiredMixin, PaperAccessMixin, View):
+class PaperCompleteView(LoginRequiredMixin, ProjectMemberRequiredMixin, PaperAccessMixin, View):
     """
     Endpoint para marcar un paper como completado.
     
@@ -229,7 +230,7 @@ class PaperCompleteView(LoginRequiredMixin, PaperAccessMixin, View):
     https://docs.djangoproject.com/en/stable/ref/class-based-views/base/#view
     """
     
-    def post(self, request, pk):
+    def post(self, request, project_id, pk):
         """
         Procesar solicitud de completar paper.
         
@@ -317,10 +318,10 @@ class PaperCompleteView(LoginRequiredMixin, PaperAccessMixin, View):
             user.is_superuser
         )
 
-class QuoteCreateView(LoginRequiredMixin, View):
+class QuoteCreateView(LoginRequiredMixin, ProjectMemberRequiredMixin, View):
     """API endpoint para crear quotes (JSON)."""
     
-    def post(self, request):
+    def post(self, request, project_id):
         try:
             # Parsear datos
             data = json.loads(request.body)
@@ -425,10 +426,10 @@ class QuoteCreateView(LoginRequiredMixin, View):
         )
 
 
-class QuoteDeleteView(LoginRequiredMixin, View):
+class QuoteDeleteView(LoginRequiredMixin, ProjectMemberRequiredMixin, View):
     """API endpoint para eliminar quotes."""
     
-    def delete(self, request, pk):
+    def delete(self, request, project_id, pk):
         quote = get_object_or_404(Quote, pk=pk)
         
         if not self._can_delete_quote(request.user, quote):
@@ -462,3 +463,95 @@ class QuoteDeleteView(LoginRequiredMixin, View):
             user.is_staff or
             user.is_superuser
         )
+
+
+class PaperReassignView(LoginRequiredMixin, ProjectMemberRequiredMixin, View):
+    """
+    Vista para reasignar un paper a otro miembro del proyecto.
+    
+    Solo el owner del proyecto puede reasignar papers.
+    """
+    
+    def post(self, request, project_id, pk):
+        """
+        POST /project/<project_id>/extraction/papers/<pk>/reassign/
+        
+        JSON payload:
+        {
+            "assigned_to_id": <user_id>
+        }
+        """
+        try:
+            # Obtener paper
+            paper = get_object_or_404(PaperExtraction, pk=pk)
+            phase = paper.extraction_phase
+            project = phase.project
+            
+            # Validar que el usuario sea owner
+            if request.user != project.owner and not request.user.is_staff:
+                return JsonResponse(
+                    {'error': 'Solo el owner puede reasignar papers'},
+                    status=403
+                )
+            
+            # Obtener datos
+            data = json.loads(request.body)
+            assigned_to_id = data.get('assigned_to_id')
+            
+            if not assigned_to_id:
+                return JsonResponse(
+                    {'error': 'assigned_to_id es requerido'},
+                    status=400
+                )
+            
+            # Obtener usuario a asignar
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            assigned_user = get_object_or_404(User, pk=assigned_to_id)
+            
+            # Validar que sea miembro del proyecto
+            from apps.project.structure.models.project_models import Membership
+            is_member = (
+                assigned_user == project.owner or
+                Membership.objects.filter(
+                    project=project,
+                    user=assigned_user
+                ).exists()
+            )
+            
+            if not is_member:
+                return JsonResponse(
+                    {'error': f'{assigned_user.username} no es miembro del proyecto'},
+                    status=400
+                )
+            
+            # Reasignar
+            old_assigned_to = paper.assigned_to
+            paper.assigned_to = assigned_user
+            paper.save(update_fields=['assigned_to', 'updated_at'])
+            
+            logger.info(
+                f"Paper {pk} reasignado de {old_assigned_to.username if old_assigned_to else 'nadie'} "
+                f"a {assigned_user.username} por {request.user.username}"
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Paper reasignado a {assigned_user.username}',
+                'assigned_to': {
+                    'id': assigned_user.id,
+                    'username': assigned_user.username
+                }
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {'error': 'JSON inválido'},
+                status=400
+            )
+        except Exception as e:
+            logger.exception("Error reasignando paper")
+            return JsonResponse(
+                {'error': f'Error al reasignar: {str(e)}'},
+                status=500
+            )
