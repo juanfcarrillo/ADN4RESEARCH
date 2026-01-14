@@ -26,11 +26,16 @@ class DeductiveTagForm(forms.ModelForm):
     
     class Meta:
         model = Tag
-        fields = ['name', 'rq_related']
+        fields = ['name', 'color', 'rq_related']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'input input-bordered w-full',
                 'placeholder': 'Ej. Costo Financiero'
+            }),
+            'color': forms.TextInput(attrs={
+                'class': 'input input-bordered w-full',
+                'type': 'color',
+                'value': '#6366F1',
             }),
             'rq_related': forms.Select(attrs={
                 'class': 'select select-bordered w-full'
