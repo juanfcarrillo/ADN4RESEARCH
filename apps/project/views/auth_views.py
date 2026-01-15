@@ -219,18 +219,18 @@ def get_project_active_phase(project):
     # try:
     #     from apps.extraction.planning.models import ExtractionPhase
         
-    #     try:
-    #         extraction_phase = ExtractionPhase.objects.filter(project=project).first()
-    #         if extraction_phase and extraction_phase.status != 'CLOSED':
-    #             return {
-    #                 'phase_name': 'Extraction',
-    #                 'phase_url': f'/extraction/{extraction_phase.id}/',
-    #                 'phase_key': 'extraction'
-    #             }
-    #     except ExtractionPhase.DoesNotExist:
-    #         pass
-    # except ImportError:
-    #     pass
+        try:
+            extraction_phase = ExtractionPhase.objects.filter(project=project).first()
+            if extraction_phase and extraction_phase.status != 'CLOSED':
+                return {
+                    'phase_name': 'Extraction',
+                    'phase_url': f'/project/{project.id}/extraction/',
+                    'phase_key': 'extraction'
+                }
+        except ExtractionPhase.DoesNotExist:
+            pass
+    except ImportError:
+        pass
     
     # Check Selection Phase if it exists
     try:
