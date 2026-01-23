@@ -20,8 +20,8 @@
                     {{ current_stage_plan.planned_start_date|date:"M d" }} - {{ current_stage_plan.planned_end_date|date:"M d, Y" }}
                 </span>
             </div>
-            {% else %}
-            <span class="pr-3 font-medium text-base-content/80">Dates not set</span>
+            {% elif not current_stage_plan %}
+            <span class="pr-3 font-medium text-base-content/80">Project Completion Date{{ project.end_date|date:"M d, Y" }}</span>
             {% endif %}
             <form method="GET" action="">
                 <select name="status" class="select select-bordered select-sm w-40" onchange="this.form.submit()">
